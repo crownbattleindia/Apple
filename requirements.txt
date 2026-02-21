@@ -1,3 +1,4 @@
 quart
 telethon
-firebase-admin
+motor
+dnspython
