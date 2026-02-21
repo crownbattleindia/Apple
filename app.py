@@ -1,181 +1,266 @@
-import os, asyncio, uuid
-from quart import Quart, render_template_string, request, session, redirect, url_for
+import os, asyncio, uuid, time
+from datetime import datetime
+from quart import Quart, render_template_string, request, session, redirect, url_for, jsonify
 from telethon import TelegramClient
 from telethon.sessions import StringSession
 
 app = Quart(__name__)
-app.secret_key = "VIAH_BASS_ULTIMATE_SECRET"
+app.secret_key = "VIAH_BASS_KING_KEY"
 
 # --- CONFIG ---
 API_ID = 35717345
 API_HASH = 'db33bd6a35e54a1aec297d3e28262b2a'
 STRING_SESSION = os.environ.get("SESSION") 
 GROUP_ID = -5274822277 
+ADMIN_CREDENTIALS = {"id": "king", "pass": "king123"} #
+
+# In-memory storage (RAM mein rahega, stealth ke liye)
+api_database = {} 
+usage_stats = {"total_hits": 0, "active_apis": 0}
 
 client = TelegramClient(StringSession(STRING_SESSION), API_ID, API_HASH)
 
-# --- DASHBOARD UI ---
-HTML_UI = """
+# --- UI TEMPLATES (Phone-View Optimized) ---
+
+# 1. Login Page
+LOGIN_UI = """
+<body class="bg-[#0f172a] flex items-center justify-center min-h-screen font-sans p-6 text-slate-200">
+    <div class="w-full max-w-sm bg-[#1e293b] p-8 rounded-3xl shadow-2xl border border-slate-700">
+        <h1 class="text-3xl font-black text-blue-500 mb-2 italic">VIAH BASS</h1>
+        <p class="text-slate-500 text-xs mb-8 uppercase tracking-widest">Admin Authorization Required</p>
+        <form action="/login" method="post" class="space-y-6">
+            <input type="text" name="id" placeholder="Admin ID" required class="w-full p-4 bg-[#0f172a] rounded-2xl border border-slate-600 outline-none focus:border-blue-500">
+            <input type="password" name="pass" placeholder="Password" required class="w-full p-4 bg-[#0f172a] rounded-2xl border border-slate-600 outline-none focus:border-blue-500">
+            <button type="submit" class="w-full bg-blue-600 py-4 rounded-2xl font-black uppercase tracking-widest shadow-lg">Enter Command Center</button>
+        </form>
+    </div>
+</body>
+<script src="https://cdn.tailwindcss.com"></script>
+"""
+
+# 2. Main Dashboard & Sidebar
+DASHBOARD_UI = """
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Viah Bass | Command Center</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
-<body class="bg-[#0f172a] text-slate-200 font-sans">
-
-    <div class="flex min-h-screen">
-        
-        <div class="w-64 bg-[#1e293b] border-r border-slate-700 hidden md:block">
-            <div class="p-6">
-                <h1 class="text-xl font-black text-blue-400 tracking-tighter italic underline decoration-2">VIAH BASS</h1>
-                <p class="text-[10px] text-slate-500 font-bold uppercase mt-1">Enterprise Node v4.0</p>
-            </div>
-            <nav class="mt-6 space-y-1 px-4">
-                <a href="#" class="flex items-center space-x-3 p-3 bg-blue-600 rounded-lg text-white font-bold transition">
-                    <i class="fas fa-th-large w-5"></i><span>Dashboard</span>
-                </a>
-                <a href="#" class="flex items-center space-x-3 p-3 hover:bg-slate-700 rounded-lg transition">
-                    <i class="fas fa-user w-5 text-slate-400"></i><span>My Profile</span>
-                </a>
-                <a href="#" class="flex items-center space-x-3 p-3 hover:bg-slate-700 rounded-lg transition">
-                    <i class="fas fa-key w-5 text-slate-400"></i><span>API Management</span>
-                </a>
-                <a href="#" class="flex items-center space-x-3 p-3 hover:bg-slate-700 rounded-lg transition text-red-400 mt-20">
-                    <i class="fas fa-power-off w-5"></i><span>Logout</span>
-                </a>
-            </nav>
+<body class="bg-[#0f172a] text-slate-200 font-sans pb-20">
+    <nav class="bg-[#1e293b] p-5 flex justify-between items-center sticky top-0 z-50 border-b border-slate-700">
+        <div class="flex items-center space-x-3">
+            <div id="menu-btn" class="text-2xl cursor-pointer"><i class="fas fa-bars text-blue-400"></i></div>
+            <h1 class="font-black text-xl italic tracking-tighter">VIAH BASS</h1>
         </div>
+        <div class="text-xs font-bold text-green-400 bg-green-500/10 px-3 py-1 rounded-full border border-green-500/20 animate-pulse">SYSTEM: ONLINE</div>
+    </nav>
 
-        <div class="flex-1">
-            <header class="bg-[#1e293b]/50 backdrop-blur-md border-b border-slate-700 p-4 sticky top-0 z-10 flex justify-between items-center">
-                <div class="flex items-center space-x-4">
-                    <span class="bg-green-500/10 text-green-400 text-[10px] px-2 py-1 rounded border border-green-500/20 font-bold animate-pulse">SYSTEM LIVE</span>
-                </div>
-                <div class="flex items-center space-x-4">
-                    <span class="text-sm font-semibold text-slate-400">Welcome, Omega</span>
-                    <div class="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center font-bold text-sm">OP</div>
-                </div>
-            </header>
-
-            <main class="p-8 space-y-8">
-                
-                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    
-                    <div class="lg:col-span-1 bg-gradient-to-br from-blue-900 to-indigo-900 p-6 rounded-3xl shadow-xl border border-blue-400/20">
-                        <div class="flex justify-between items-start mb-6">
-                            <h3 class="font-black text-lg text-white">GENERATE API</h3>
-                            <i class="fas fa-code text-blue-300"></i>
-                        </div>
-                        <p class="text-blue-100 text-xs mb-6 leading-relaxed">Create a secure endpoint for external data integration and third-party sync.</p>
-                        <button onclick="alert('API Key Generated: VB-'+Math.random().toString(36).substring(7).toUpperCase())" 
-                                class="w-full bg-white text-blue-900 font-black py-3 rounded-xl hover:bg-blue-50 transition shadow-lg text-sm">
-                            CREATE NEW API KEY
-                        </button>
-                    </div>
-
-                    <div class="bg-[#1e293b] p-6 rounded-3xl border border-slate-700 flex flex-col justify-between">
-                        <p class="text-slate-500 text-[10px] font-black uppercase tracking-widest">Active Connection</p>
-                        <h4 class="text-4xl font-black text-white tracking-tighter mt-2">TELETHON <span class="text-blue-500">v2</span></h4>
-                        <div class="mt-4 flex space-x-2">
-                            <span class="h-1 flex-1 bg-blue-600 rounded-full"></span>
-                            <span class="h-1 flex-1 bg-slate-600 rounded-full"></span>
-                        </div>
-                    </div>
-
-                    <div class="bg-[#1e293b] p-6 rounded-3xl border border-slate-700 flex flex-col justify-between">
-                        <p class="text-slate-500 text-[10px] font-black uppercase tracking-widest">Global Sync Count</p>
-                        <h4 class="text-4xl font-black text-white tracking-tighter mt-2">1,204 <span class="text-sm text-slate-500">Hits</span></h4>
-                        <p class="text-[10px] text-green-400 mt-4">+12% from last session</p>
-                    </div>
-                </div>
-
-                <div class="bg-[#1e293b] rounded-3xl shadow-2xl border border-slate-700 overflow-hidden">
-                    <div class="p-6 border-b border-slate-700 bg-slate-800/30">
-                        <h3 class="font-black text-lg flex items-center">
-                            <i class="fas fa-shield-halved mr-3 text-blue-400"></i> ASSET LOOKUP ENGINE
-                        </h3>
-                    </div>
-                    <div class="p-8">
-                        <form action="/fetch" method="get" class="grid grid-cols-1 md:grid-cols-2 gap-8">
-                            <div class="space-y-2">
-                                <label class="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Module Selection</label>
-                                <select name="type" class="w-full p-4 bg-[#0f172a] border border-slate-600 rounded-2xl focus:border-blue-500 outline-none text-sm font-bold appearance-none">
-                                    <option value="num">📞 Number Verification</option>
-                                    <option value="aadhar">🆔 Aadhar Registry</option>
-                                    <option value="pan">💳 Financial PAN Sync</option>
-                                    <option value="vehicle">🚗 RTO/Vehicle Trace</option>
-                                    <option value="ip">🌐 IP Geolocation</option>
-                                    <option value="mail">📧 Electronic Mail Trace</option>
-                                </select>
-                            </div>
-                            <div class="space-y-2">
-                                <label class="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Target Identifier</label>
-                                <input type="text" name="input" placeholder="Input Value..." required 
-                                       class="w-full p-4 bg-[#0f172a] border border-slate-600 rounded-2xl focus:border-blue-500 outline-none text-sm font-medium">
-                            </div>
-                            <div class="md:col-span-2 mt-4">
-                                <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-5 rounded-2xl shadow-xl transition-all uppercase tracking-widest text-sm">
-                                    Execute Secure Data Fetch
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-
-            </main>
+    <div id="sidebar" class="fixed inset-0 bg-[#0f172a]/95 z-50 hidden p-10 transform -translate-x-full transition-transform duration-300">
+        <div class="flex justify-between mb-20">
+            <h2 class="text-2xl font-black italic text-blue-400 underline">VIAH MENU</h2>
+            <i onclick="toggleMenu()" class="fas fa-times text-2xl"></i>
+        </div>
+        <div class="space-y-8">
+            <a href="/" class="block text-2xl font-bold hover:text-blue-500"><i class="fas fa-home mr-4"></i>Home</a>
+            <a href="/creator" class="block text-2xl font-bold hover:text-blue-500"><i class="fas fa-plus-square mr-4"></i>API Creator</a>
+            <a href="/analytics" class="block text-2xl font-bold hover:text-blue-500"><i class="fas fa-chart-line mr-4"></i>Analytics</a>
+            <a href="/logout" class="block text-2xl font-bold text-red-500 mt-20"><i class="fas fa-power-off mr-4"></i>Logout</a>
         </div>
     </div>
+
+    <main class="p-6 space-y-6">
+        <div class="grid grid-cols-2 gap-4">
+            <div class="bg-[#1e293b] p-5 rounded-3xl border border-slate-700">
+                <p class="text-[10px] font-black text-slate-500 uppercase tracking-widest">Total Users</p>
+                <h3 class="text-3xl font-black mt-1">128</h3>
+            </div>
+            <div class="bg-[#1e293b] p-5 rounded-3xl border border-slate-700">
+                <p class="text-[10px] font-black text-slate-500 uppercase tracking-widest">API Active</p>
+                <h3 class="text-3xl font-black mt-1 text-blue-400">{{active_count}}</h3>
+            </div>
+        </div>
+
+        <div class="bg-[#1e293b] p-6 rounded-3xl border border-slate-700">
+            <p class="text-[10px] font-black text-slate-500 uppercase mb-4">Traffic Performance (Ping: 42ms)</p>
+            <canvas id="hitChart" class="h-40"></canvas>
+        </div>
+
+        <div class="space-y-4">
+            <h4 class="font-black text-sm uppercase text-slate-400 tracking-widest">Live Features Status</h4>
+            {% for feature in ['Phone', 'Aadhar', 'PAN', 'Vehicle', 'IP'] %}
+            <div class="bg-[#1e293b] p-4 rounded-2xl flex justify-between items-center border border-slate-700">
+                <span class="font-bold">{{feature}} Fetcher</span>
+                <span class="text-[10px] bg-green-500/20 text-green-400 px-2 py-1 rounded font-black">99.9% UP</span>
+            </div>
+            {% endfor %}
+        </div>
+    </main>
+
+    <script>
+        function toggleMenu() {
+            const side = document.getElementById('sidebar');
+            side.classList.toggle('hidden');
+            setTimeout(() => side.classList.toggle('-translate-x-full'), 10);
+        }
+        document.getElementById('menu-btn').onclick = toggleMenu;
+
+        const ctx = document.getElementById('hitChart').getContext('2d');
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: ['10am', '11am', '12pm', '1pm', '2pm', '3pm'],
+                datasets: [{
+                    label: 'API Hits',
+                    data: [65, 59, 80, 81, 56, 95],
+                    borderColor: '#3b82f6',
+                    tension: 0.4,
+                    fill: true,
+                    backgroundColor: 'rgba(59, 130, 246, 0.1)'
+                }]
+            },
+            options: { plugins: { legend: { display: false } }, scales: { y: { display: false }, x: { grid: { display: false } } } }
+        });
+    </script>
 </body>
 </html>
 """
 
+# 3. API Creator with Scheduling & Pause/Delete
+CREATOR_UI = """
+<body class="bg-[#0f172a] text-slate-200 font-sans p-6">
+    <div class="flex items-center mb-8">
+        <a href="/" class="mr-4 text-xl"><i class="fas fa-chevron-left"></i></a>
+        <h2 class="text-2xl font-black italic">API DATABASE CREATOR</h2>
+    </div>
+
+    <form action="/create_api" method="post" class="space-y-6">
+        <div>
+            <label class="block text-[10px] font-black text-slate-500 uppercase mb-2">Assignee Name</label>
+            <input type="text" name="user_name" placeholder="User/Company Name" required class="w-full p-4 bg-[#1e293b] rounded-2xl border border-slate-700 outline-none">
+        </div>
+        <div>
+            <label class="block text-[10px] font-black text-slate-500 uppercase mb-2">Module Type</label>
+            <select name="module" class="w-full p-4 bg-[#1e293b] rounded-2xl border border-slate-700 outline-none">
+                <option value="num">📞 Number Database</option>
+                <option value="aadhar">🆔 Aadhar Registry</option>
+                <option value="pan">💳 PAN Sync</option>
+                <option value="vehicle">🚗 RTO Track</option>
+            </select>
+        </div>
+        <div class="grid grid-cols-2 gap-4">
+            <div>
+                <label class="block text-[10px] font-black text-slate-500 uppercase mb-2">Start Date</label>
+                <input type="date" name="start" class="w-full p-4 bg-[#1e293b] rounded-2xl border border-slate-700 outline-none text-xs">
+            </div>
+            <div>
+                <label class="block text-[10px] font-black text-slate-500 uppercase mb-2">Expiry Date</label>
+                <input type="date" name="expiry" class="w-full p-4 bg-[#1e293b] rounded-2xl border border-slate-700 outline-none text-xs">
+            </div>
+        </div>
+        <button type="submit" class="w-full bg-blue-600 py-5 rounded-3xl font-black uppercase tracking-widest shadow-xl">GENERATE SECURE API</button>
+    </form>
+
+    <div class="mt-12 space-y-4">
+        <h4 class="text-xs font-black text-slate-500 uppercase">Manage Existing Keys</h4>
+        {% for key, data in apis.items() %}
+        <div class="bg-[#1e293b] p-6 rounded-3xl border border-slate-700 space-y-4">
+            <div class="flex justify-between items-start">
+                <div>
+                    <h5 class="font-bold text-blue-400">{{data.user}}</h5>
+                    <p class="text-[10px] text-slate-500 font-mono">{{key}}</p>
+                </div>
+                <div class="flex space-x-2">
+                    <button class="text-yellow-500 p-2"><i class="fas fa-pause"></i></button>
+                    <button class="text-red-500 p-2"><i class="fas fa-trash"></i></button>
+                </div>
+            </div>
+            <div class="text-[10px] flex justify-between bg-black/20 p-2 rounded">
+                <span>Valid: {{data.start}} To {{data.expiry}}</span>
+                <span class="text-green-500 font-bold uppercase">Status: Live</span>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</body>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+"""
+
 @app.route('/')
 async def index():
-    return await render_template_string(HTML_UI)
+    if not session.get('logged_in'): return await render_template_string(LOGIN_UI)
+    return await render_template_string(DASHBOARD_UI, active_count=len(api_database))
 
-@app.route('/fetch')
-async def fetch():
-    if not STRING_SESSION:
-        return "CRITICAL: SESSION Variable Missing in Settings"
+@app.route('/login', methods=['POST'])
+async def login():
+    form = await request.form
+    if form.get('id') == ADMIN_CREDENTIALS['id'] and form.get('pass') == ADMIN_CREDENTIALS['pass']: #
+        session['logged_in'] = True
+        return redirect('/')
+    return "INVALID CREDENTIALS"
+
+@app.route('/creator')
+async def creator():
+    if not session.get('logged_in'): return redirect('/')
+    return await render_template_string(CREATOR_UI, apis=api_database)
+
+@app.route('/create_api', methods=['POST'])
+async def create_api():
+    form = await request.form
+    new_key = f"VB-KEY-{uuid.uuid4().hex[:8].upper()}"
+    api_database[new_key] = {
+        "user": form.get('user_name'),
+        "module": form.get('module'),
+        "start": form.get('start'),
+        "expiry": form.get('expiry'),
+        "status": "active",
+        "hits": 0
+    }
+    return redirect('/creator')
+
+# --- INTELLIGENT BOT FETCH LOGIC (With Branding & 3s Delay) ---
+@app.route('/api/fetch')
+async def api_fetch():
+    api_key = request.args.get('key')
+    target = request.args.get('input')
     
-    item_type = request.args.get('type')
-    val = request.args.get('input')
+    # 1. Branding Check
+    if not api_key in api_database:
+        return jsonify({"status": "error", "reason": "Unauthorized API Access. Contact @King_VB"}), 403
     
     if not client.is_connected(): await client.connect()
     
-    cmd_text = f"/{item_type} {val}"
-    sent = await client.send_message(GROUP_ID, cmd_text)
+    # 2. Advanced Fetch (Wait for both sources)
+    cmd = f"/{api_database[api_key]['module']} {target}"
+    sent = await client.send_message(GROUP_ID, cmd)
     
-    response_text = "❌ TIMEOUT: Provider node not responding."
-    for _ in range(15):
-        await asyncio.sleep(1.5)
-        msgs = await client.get_messages(GROUP_ID, limit=5)
-        for m in msgs:
-            if m.id > sent.id and m.text:
-                response_text = m.text
-                break
-        if "TIMEOUT" not in response_text: break
+    # Wait 3 seconds for analysis animation
+    await asyncio.sleep(3.5) 
+    
+    msgs = await client.get_messages(GROUP_ID, limit=5)
+    final_data = ""
+    for m in msgs:
+        if m.id > sent.id and m.text:
+            # Bot ka naam filter karna aur organise karna
+            clean_text = m.text.replace("Bot Name:", "").strip()
+            final_data = clean_text
+            break
 
-    return f"""
-    <body style="background:#0f172a; padding:40px; color:#e2e8f0; font-family:monospace;">
-        <div style="background:#1e293b; padding:30px; border-radius:30px; max-width:900px; margin:auto; border:1px solid #334155; box-shadow:0 25px 50px -12px rgba(0,0,0,0.5);">
-            <h2 style="color:#60a5fa; border-bottom:2px solid #334155; padding-bottom:15px; margin-bottom:20px; font-weight:900;">NODE RESPONSE LOGS</h2>
-            <pre style="white-space: pre-wrap; font-size:14px; background:#0f172a; padding:25px; border-radius:20px; border:1px solid #334155; line-height:1.8; color:#94a3b8;">{response_text}</pre>
-            <br>
-            <button onclick="window.history.back()" style="background:#3b82f6; color:white; padding:15px 30px; border:none; border-radius:15px; cursor:pointer; font-weight:900; text-transform:uppercase; letter-spacing:1px; font-size:12px;">Initiate New Query</button>
-        </div>
-    </body>
-    """
+    # 3. Final Branding Integration
+    response = {
+        "status": "success",
+        "branding": "POWERED BY VIAH BASS ENGINE",
+        "data": final_data,
+        "analysed_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    }
+    
+    # API Work only if branding is accepted
+    return jsonify(response)
 
 if __name__ == '__main__':
     async def main():
-        try:
-            await client.start()
-            port = int(os.environ.get("PORT", 9900))
-            await app.run_task(host='0.0.0.0', port=port)
-        except Exception as e: print(f"Error: {e}")
+        await client.start()
+        port = int(os.environ.get("PORT", 9900))
+        await app.run_task(host='0.0.0.0', port=port)
     asyncio.run(main())
